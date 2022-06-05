@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Emmanuel Ibikunle / Udacity - This template Create an EC2 instance in a given VPC
+Resources:
+  WebserverSecurityGrp:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Creates a Security Group which only allows inbound access on TCP port 80 and also allows unrestricted outbound access
+      VpcId: vpc-059405a40e66cadf3
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+  WebserverInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      ImageId: ami-0022f774911c1d690
+      KeyName: "UdacityDemo2"
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet:
+            - Ref: "WebserverSecurityGrp"
+          SubnetId: subnet-0cbdc832e3addea01
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo yum update -y
+          sudo yum install -y httpd
+          sudo systemctl start httpd
+          sudo systemctl enable httpd
+
+# aws cloudformation create-stack --stack-name mySecGrpWithEC2Stack --region us-east-1 --template-body file://sample/challenge1.yaml
+# aws cloudformation delete-stack --stack-name mySecGrpWithEC2Stack --region us-east-1

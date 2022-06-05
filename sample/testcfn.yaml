@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Emmanuel Ibikunle / Udacity - This template deploys a VPC
+Resources:
+  UdacityVPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: "true"
+      Tags:
+        - Key: name
+          Value: myFirstCFNVpc
+# create-stack
+# aws cloudformation create-stack --stack-name myFirstCFNStack --region us-east-1 --template-body file://sample/testcfn.yaml
+
+# update-stack
+# aws cloudformation update-stack  --stack-name myFirstCFNStack --region us-east-1 --template-body file://sample/testcfn.yaml
+
+# describe-stacks
+# aws cloudformation describe-stacks --stack-name myFirstCFNStack --region us-east-1
+
+# delete-stack
+# aws cloudformation delete-stack --stack-name myFirstCFNStack --region us-east-1
