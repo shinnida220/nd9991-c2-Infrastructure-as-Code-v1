@@ -1,54 +1,49 @@
 Description: >
-  An infrastructure with a VPC that has two(2) Subnets and an Internet Gateway
-  First subnet is public
-  Second subnet is private
-  The public subnet contains a NAT Gateway which is attached to 2nd subnet to allow communication securely to the outside
-  Each subnet has a route table
-  RouteTable1 for public subnet forwards all traffic to the Internet Gateway
-  RouteTable2 for private subnet forwards all traffic to the NAT Gateway
+  Emmanuel Ibikunle / UdacityDemo2Subnets
+  This template deploys a VPC, with a pair of public and private subnets spread 
+  across two Availabilty Zones. It deploys an Internet Gateway, with a default 
+  route on the public subnets. It deploys a pair of NAT Gateways (one in each AZ), 
+  and default routes for them in the private subnets.
 
 Parameters:
   EnvironmentName:
     Description: An Environment name that will be prefixed to resources
     Type: String
-    Default: Challenge2
+    Default: udacity-demo
   VpcCIDR:
     Description: Please enter the IP range (CIDR notation) for this
     Type: String
     Default: 10.0.0.0/16
   PublicSubnetCIDR:
-    Description: Please enter the IP range (CIDR notation) for the Public subnet in the first Availability Zone
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
     Type: String
-    Default: 10.0.0.0/24
+    Default: 10.0.1.0/24
   PrivateSubnetCIDR:
     Description: Please enter the IP range (CIDR notation) for the Private subnet in the first Availability Zone
     Type: String
-    Default: 10.0.1.0/24
+    Default: 10.0.2.0/24
 
 Resources:
   VPC:
-    Description: Challenge-2 VPC
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: !Ref VpcCIDR
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Vpc
+          Value: !Ref EnvironmentName
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
-    Description: Internet Gateway
     Properties:
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Internet Gateway
-
+          Value: !Ref EnvironmentName
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
 
   PublicSubnet:
     Type: AWS::EC2::Subnet
@@ -66,11 +61,11 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       MapPublicIpOnLaunch: false
-      AvailabilityZone: !Select [1, !GetAZs ""]
+      AvailabilityZone: !Select [0, !GetAZs ""]
       CidrBlock: !Ref PrivateSubnetCIDR
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
 
   NatGatewayEIP:
     Type: AWS::EC2::EIP
@@ -90,16 +85,14 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Public Route Table
-
-  PublicRoute:
+          Value: !Sub ${EnvironmentName} Public Routes
+  DefaultPublicRoute:
     Type: AWS::EC2::Route
     DependsOn: InternetGatewayAttachment
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      GatewayId: !Ref InternetGateway
       DestinationCidrBlock: 0.0.0.0/0
-
+      GatewayId: !Ref InternetGateway
   PublicSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -112,17 +105,14 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} Private Route Table
-
-  PrivateRoute:
+          Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+  DefaultPrivateRoute:
     Type: AWS::EC2::Route
-    DependsOn: NatGateway
     Properties:
       RouteTableId: !Ref PrivateRouteTable
-      NatGatewayId: !Ref NatGateway
       DestinationCidrBlock: 0.0.0.0/0
-
-  PrivateSubnetRouteTableAssociation:
+      NatGatewayId: !Ref NatGateway
+  PrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PrivateRouteTable
@@ -134,27 +124,25 @@ Outputs:
     Value: !Ref VPC
     Export:
       Name: !Sub ${EnvironmentName}-VPCID
-
   VPCPublicRouteTable:
     Description: Public Routing
     Value: !Ref PublicRouteTable
     Export:
       Name: !Sub ${EnvironmentName}-PUB-RT
-
   VPCPrivateRouteTable:
-    Description: Private Routing
+    Description: Private Routing AZ1
     Value: !Ref PrivateRouteTable
     Export:
-      Name: !Sub ${EnvironmentName}-PRV-RT
-
+      Name: !Sub ${EnvironmentName}-PRI-RT
   PublicSubnet:
     Description: A reference to the public subnet in the 1st Availability Zone
     Value: !Ref PublicSubnet
     Export:
       Name: !Sub ${EnvironmentName}-PUB-SN
-
   PrivateSubnet:
     Description: A reference to the private subnet in the 1st Availability Zone
     Value: !Ref PrivateSubnet
     Export:
-      Name: !Sub ${EnvironmentName}-PRV-SN
+      Name: !Sub ${EnvironmentName}-PRI-SN
+# aws cloudformation create-stack --stack-name myInfra --region us-east-1 --template-body file://sample/network-infra/infra-2-subnets.yaml --parameters file://sample/network-infra/infra-2-subnets.json
+# ./sample/create.sh myInfra sample/network-infra/infra-2-subnets.yaml sample/network-infra/infra-2-subnets.json

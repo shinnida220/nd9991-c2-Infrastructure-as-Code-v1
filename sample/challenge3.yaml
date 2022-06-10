@@ -1,0 +1,66 @@
+# Exercise 3 Solution
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+  AMItoUse:
+    Description: AMI to use for our base image
+    Type: String
+
+Resources:
+  # IAM Role to allow EC2 Session Manager to access our server
+  RoleForSSMAccess:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  # Instance Profile - An InstanceProfile will allow passing the IAM role to our server.
+  ServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref RoleForSSMAccess
+
+  # EC2 instance security group
+  WebAccessSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our test host
+      VpcId:
+        Fn::ImportValue: !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  # EC2 Instance (Server)
+  ServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref AMItoUse
+      IamInstanceProfile: !Ref ServerInstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet:
+            - Ref: WebAccessSecurityGroup
+          SubnetId:
+            Fn::ImportValue: !Sub "${EnvironmentName}-PRI-SN"
+#aws cloudformation create-stack --stack-name myInfraServer --template-body file://sample/challenge3.yaml --parameters file://sample/challenge3.json --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM"

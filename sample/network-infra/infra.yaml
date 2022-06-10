@@ -234,3 +234,4 @@ Outputs:
     Value: !Ref PrivateSubnet2
     Export:
       Name: !Sub ${EnvironmentName}-PRI2-SN
+# aws cloudformation create-stack --stack-name myNewStack --region us-east-1 --template-body file://sample/network-infra/infra.yaml --parameters file://sample/network-infra/infra.json
