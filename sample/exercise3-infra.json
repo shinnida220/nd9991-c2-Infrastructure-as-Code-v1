@@ -1,0 +1,10 @@
+[{
+  "ParameterKey": "EnvironmentName",
+  "ParameterValue": "UdacityDemoInfra"
+},{
+  "ParameterKey": "myUsername",
+  "ParameterValue": "admin"
+},{
+  "ParameterKey": "myPassword",
+  "ParameterValue": "abcd_1234$"
+}]

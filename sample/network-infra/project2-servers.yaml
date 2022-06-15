@@ -1,0 +1,232 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Emmanuel Ibikunle / Udacity Project 2
+  This template builds resources using the output of the infrastructure stack
+  It does the ff: 
+  1. creates an IAM role that can be associated to EC2 instances to allow them access s3 buckets
+  2. attaches a load balancer to the public subnets
+  3. creates an autoscaling group with min of 4 EC2 instances  spread across multiple AZs in the private subnets
+  4. Creates necessary security groups and associates them to the appropriate resources
+
+Parameters:
+  EnvironmentName:
+    Description: An Environment name that will be prefixed to resources
+    Type: String
+  AMItoUse:
+    Description: ID of the AMI to use (Ubuntu 18.x)
+    Type: String
+  AutoScalingGroupMinServers:
+    Description: Minimum number of server to have running per time
+    Type: String
+  AutoScalingGroupMaxServers:
+    Description: Maximum number of server to have running per time
+    Type: String
+
+Resources:
+  # IAM Role to allow EC2 Session Manager to access our server
+  UdacityS3ReadOnlyEC2:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  # Instance Profile - An InstanceProfile will allow passing the IAM role to our server.
+  ServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref UdacityS3ReadOnlyEC2
+
+  # Security Group for the AutoScaling group servers
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our autoscaling group servers and SSH from local only
+      VpcId:
+        Fn::ImportValue: !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+
+  # Security Group for the load balancer
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our load balancer
+      GroupName: Load balancer security group
+      VpcId:
+        Fn::ImportValue: !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} LoadBalancer Security Group
+
+  # Launch Configuration to be used by the AutoScaling Group
+  WebServerLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install apache2 -y
+          systemctl start apache2.service
+          cd /var/www/html
+          echo "Udacity Demo Web Server Up and Running!" > index.html
+      ImageId: !Ref AMItoUse
+      IamInstanceProfile: !Ref ServerInstanceProfile
+      SecurityGroups:
+        - Ref: WebServerSecurityGroup
+      InstanceType: t2.micro
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sdk"
+          Ebs:
+            VolumeSize: "10"
+
+  # The actual AutoScaling Group
+  WebserverAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub "${EnvironmentName}-PRIV-NETS"
+      LaunchConfigurationName:
+        Ref: WebServerLaunchConfig
+      MinSize: !Ref AutoScalingGroupMinServers
+      MaxSize: !Ref AutoScalingGroupMaxServers
+      TargetGroupARNs:
+        - Ref: WebServerTargetGroup
+
+  # The actual Load Balancer
+  WebServerLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+        - Fn::ImportValue: !Sub "${EnvironmentName}-PUB-SN1"
+        - Fn::ImportValue: !Sub "${EnvironmentName}-PUB-SN2"
+      SecurityGroups:
+        - Ref: LoadBalancerSecurityGroup
+
+  # A listener for the loadbalancer to route incoming traffic to members of the autoscaling group
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn:
+        Ref: WebServerLoadBalancer
+      Port: "80"
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: WebServerTargetGroup
+
+  # A rule for the listener to process
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref LoadBalancerListener
+      Priority: 1
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref WebServerTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values: [/]
+
+  # The loadbalancer target group
+  WebAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${EnvironmentName}-VPCID"
+
+  # Lets create a jumpbox
+  # Jumbox security group
+  JumpboxSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ssh alone to the host
+      VpcId:
+        Fn::ImportValue: !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          # Leaving this as anywhere because my internet modem doesn't have a stable IP
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  # The Jumpbox hosts
+  JumboxInstance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref AMItoUse
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet:
+            - Ref: JumpboxSecurityGroup
+          SubnetId:
+            Fn::ImportValue: !Sub "${EnvironmentName}-PUB-SN1"
+
+  # JumboxInstance2:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     InstanceType: t2.micro
+  #     ImageId: !Ref AMItoUse
+  #     NetworkInterfaces:
+  #       - AssociatePublicIpAddress: "true"
+  #         DeviceIndex: "0"
+  #         GroupSet:
+  #           - Ref: JumpboxSecurityGroup
+  #         SubnetId:
+  #           Fn::ImportValue: !Sub "${EnvironmentName}-PUB-SN2"
+
+Outputs:
+  LoadbalancerPublicURL:
+    Description: the public URL of the LoadBalancer
+    Value: !Join ["", ["http://", !GetAtt WebServerLoadBalancer.DNSName]]
+    Export:
+      Name: !Sub "${EnvironmentName}-LB-PUB-URL"

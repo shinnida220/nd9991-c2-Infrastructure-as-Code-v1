@@ -1,0 +1,13 @@
+[{
+  "ParameterKey": "EnvironmentName",
+  "ParameterValue": "Udacity2ndProject"
+},{
+  "ParameterKey": "AMItoUse",
+  "ParameterValue": "ami-005de95e8ff495156"
+},{
+  "ParameterKey": "AutoScalingGroupMinServers",
+  "ParameterValue": 1
+},{
+  "ParameterKey": "AutoScalingGroupMaxServers",
+  "ParameterValue": 2
+}]
