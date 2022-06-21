@@ -5,9 +5,12 @@
   "ParameterKey": "AMItoUse",
   "ParameterValue": "ami-005de95e8ff495156"
 },{
+  "ParameterKey": "SSHKeyPair",
+  "ParameterValue": "UdacityDemo2"
+},{
   "ParameterKey": "AutoScalingGroupMinServers",
-  "ParameterValue": 1
+  "ParameterValue": "4"
 },{
   "ParameterKey": "AutoScalingGroupMaxServers",
-  "ParameterValue": 2
+  "ParameterValue": "6"
 }]
